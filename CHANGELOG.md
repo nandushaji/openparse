@@ -35,5 +35,5 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Eval harness script for fixture-based benchmarking
 - MIT license
 
-[Unreleased]: https://github.com/yourusername/openparse/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/yourusername/openparse/releases/tag/v0.1.0
+[Unreleased]: https://github.com/nandushaji/openparse/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/nandushaji/openparse/releases/tag/v0.1.0

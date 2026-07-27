@@ -79,10 +79,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/openparse.git"
+    "url": "https://github.com/nandushaji/openparse.git"
   },
-  "homepage": "https://github.com/yourusername/openparse#readme",
+  "homepage": "https://github.com/nandushaji/openparse#readme",
   "bugs": {
-    "url": "https://github.com/yourusername/openparse/issues"
+    "url": "https://github.com/nandushaji/openparse/issues"
   }
 }

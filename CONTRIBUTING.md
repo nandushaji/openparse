@@ -5,7 +5,7 @@ Thank you for your interest in contributing!
 ## Development setup
 
 ```bash
-git clone https://github.com/yourusername/openparse
+git clone https://github.com/nandushaji/openparse
 cd openparse
 npm install
 npm run build

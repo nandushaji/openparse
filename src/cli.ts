@@ -9,7 +9,7 @@ program
   .name('openparse')
   .description(
     'Open-source LlamaParse-like document parsing. Bring your own LLM key.\n' +
-    'Package: @openparse/core  |  Docs: https://github.com/yourusername/openparse'
+    'Package: @openparse/core  |  Docs: https://github.com/nandushaji/openparse'
   )
   .version('0.1.0')
 
