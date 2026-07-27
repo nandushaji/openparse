@@ -1,0 +1,53 @@
+import type { ExtractedPage } from '../types.js'
+
+export interface FastResult {
+  markdown: string
+  text: string
+}
+
+/**
+ * Fast mode: no LLM call. Converts the PDF text layer to basic markdown using
+ * simple heuristics. Good for plain single-column prose.
+ */
+export async function processFast(page: ExtractedPage): Promise<FastResult> {
+  const raw = page.text.trim()
+
+  if (!raw) {
+    return { markdown: '', text: '' }
+  }
+
+  const markdown = textToBasicMarkdown(raw)
+  return { markdown, text: raw }
+}
+
+/**
+ * Convert plain extracted text to minimal markdown.
+ * Rules:
+ *  - Short ALL-CAPS lines → heading candidates
+ *  - Lines that look like bullet points → keep list markers
+ *  - Group consecutive non-blank lines into paragraphs
+ */
+function textToBasicMarkdown(text: string): string {
+  const rawLines = text.split(/\n+/).map(l => l.trim()).filter(Boolean)
+  const output: string[] = []
+
+  for (const line of rawLines) {
+    if (!line) continue
+
+    // Already a GFM list item
+    if (/^[-*•]\s/.test(line) || /^\d+\.\s/.test(line)) {
+      output.push(line)
+      continue
+    }
+
+    // Short, all-caps line that looks like a heading
+    if (line.length < 80 && line === line.toUpperCase() && /[A-Z]/.test(line)) {
+      output.push(`## ${line}`)
+      continue
+    }
+
+    output.push(line)
+  }
+
+  return output.join('\n\n')
+}

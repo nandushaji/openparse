@@ -1,0 +1,25 @@
+node_modules/
+dist/
+*.env
+.env*
+*.local
+
+# Test artifacts
+tests/fixtures/*.pdf
+tests/fixtures/*.png
+tests/fixtures/*.jpeg
+tests/fixtures/output/
+
+# Eval output
+scripts/eval-output/
+*.eval.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo

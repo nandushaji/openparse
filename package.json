@@ -1,0 +1,88 @@
+{
+  "name": "@openparse/core",
+  "version": "0.1.0",
+  "description": "Open-source, LlamaParse-like document parsing for Node.js. Bring your own LLM key.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "bin": {
+    "openparse": "./dist/cli.cjs",
+    "op": "./dist/cli.cjs"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "eval": "tsx scripts/eval.ts",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "pdfjs-dist": "^4.9.155"
+  },
+  "optionalDependencies": {
+    "canvas": "^2.11.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "canvas": "^2.11.2",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "pdf",
+    "document",
+    "parser",
+    "llm",
+    "openai",
+    "rag",
+    "markdown",
+    "ocr",
+    "llama-parse",
+    "llamaparse",
+    "byok",
+    "gpt",
+    "anthropic",
+    "ollama",
+    "groq"
+  ],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/openparse.git"
+  },
+  "homepage": "https://github.com/yourusername/openparse#readme",
+  "bugs": {
+    "url": "https://github.com/yourusername/openparse/issues"
+  }
+}
