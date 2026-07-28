@@ -10,5 +10,6 @@ export default defineConfig({
   },
   test: {
     globals: false,
+    setupFiles: ['./tests/setup.ts'],
   },
 })
