@@ -9,6 +9,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-07-28
+
+### Added
+- **PPTX support** — one `ExtractedPage` per slide, text extracted via built-in SpreadsheetML / PresentationML reader
+- **XLSX / CSV / TSV support** — sheets rendered as GFM tables with zero-CVE custom parser (no SheetJS/xlsx dependency)
+- **HTML, Markdown, TXT, RTF support** — lightweight plain-text extraction with HTML-to-Markdown conversion
+- **`parseStream()` AsyncGenerator API** — yields `PageResult` items one at a time for real-time streaming
+- **Cost guards** — `maxPages` and `maxTokenBudget` options; `CostLimitError` carries partial results when budget is exceeded
+
+### Security
+- Upgraded `canvas` optional dependency from v2 → v3, eliminating a chain of CVEs in `tar`, `glob`, `rimraf`, and `@mapbox/node-pre-gyp`
+- Replaced `xlsx` (SheetJS — unresolvable prototype-pollution CVE) with a custom zero-dependency XLSX reader using the already-bundled `jszip`
+- Upgraded `vitest` dev dependency to v4 (patches critical arbitrary-file-read CVE in Vitest UI)
+- Total audit profile: **0 production CVEs** (down from 7 high + 1 critical)
+
+### Fixed
+- Test fixture race condition on Node 22 multi-worker runs (moved to `globalSetup` with atomic writes)
+- ReDoS in URL-trimming helpers (replaced regex with character-by-character iteration)
+
 ## [0.2.0] — 2026-07-28
 
 ### Added

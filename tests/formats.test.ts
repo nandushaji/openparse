@@ -103,18 +103,101 @@ describe('extractPlaintextPage — Markdown', () => {
 
 // ─── spreadsheet extractor ────────────────────────────────────────────────────
 
+/** Build a minimal XLSX buffer from an array of sheets (each sheet = array of rows). */
+async function buildMinimalXlsx(
+  sheets: Array<{ name: string; rows: string[][] }>
+): Promise<Buffer> {
+  const zip = new JSZip()
+
+  // [Content_Types].xml
+  zip.file(
+    '[Content_Types].xml',
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
+  ${sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('\n  ')}
+</Types>`
+  )
+
+  // Collect all unique strings for the shared strings table
+  const allStrings: string[] = []
+  const strIndex = (s: string) => {
+    let i = allStrings.indexOf(s)
+    if (i === -1) { i = allStrings.length; allStrings.push(s) }
+    return i
+  }
+
+  // Pre-scan to build shared strings
+  sheets.forEach(sheet => sheet.rows.forEach(row => row.forEach(cell => strIndex(cell))))
+
+  // sharedStrings.xml
+  zip.file(
+    'xl/sharedStrings.xml',
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${allStrings.length}" uniqueCount="${allStrings.length}">
+${allStrings.map(s => `  <si><t>${s.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</t></si>`).join('\n')}
+</sst>`
+  )
+
+  // workbook.xml
+  const cols = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+  const cellRef = (col: number, row: number) => `${cols[col]}${row}`
+
+  zip.file(
+    'xl/workbook.xml',
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+          xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    ${sheets.map((s, i) => `<sheet name="${s.name}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('\n    ')}
+  </sheets>
+</workbook>`
+  )
+
+  // xl/_rels/workbook.xml.rels
+  zip.file(
+    'xl/_rels/workbook.xml.rels',
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  ${sheets.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('\n  ')}
+</Relationships>`
+  )
+
+  // individual sheet XMLs
+  sheets.forEach((sheet, si) => {
+    const rowsXml = sheet.rows.map((row, ri) =>
+      `    <row r="${ri + 1}">\n` +
+      row.map((cell, ci) => {
+        const ref = cellRef(ci, ri + 1)
+        const idx = allStrings.indexOf(cell)
+        return `      <c r="${ref}" t="s"><v>${idx}</v></c>`
+      }).join('\n') +
+      `\n    </row>`
+    ).join('\n')
+
+    zip.file(
+      `xl/worksheets/sheet${si + 1}.xml`,
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetData>
+${rowsXml}
+  </sheetData>
+</worksheet>`
+    )
+  })
+
+  return zip.generateAsync({ type: 'nodebuffer' })
+}
+
 describe('extractSpreadsheetPages — XLSX', () => {
   it('returns one page per sheet as GFM table', async () => {
-    // Build a minimal XLSX in memory using xlsx library
-    const XLSX = await import('xlsx')
-    const wb = XLSX.utils.book_new()
-    const ws = XLSX.utils.aoa_to_sheet([
-      ['Name', 'Score'],
-      ['Alice', '95'],
-      ['Bob', '87'],
-    ])
-    XLSX.utils.book_append_sheet(wb, ws, 'Results')
-    const buf = Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as ArrayBuffer)
+    const buf = await buildMinimalXlsx([{
+      name: 'Results',
+      rows: [['Name', 'Score'], ['Alice', '95'], ['Bob', '87']],
+    }])
 
     const pages = await extractSpreadsheetPages(buf, logger)
     expect(pages).toHaveLength(1)
@@ -127,11 +210,10 @@ describe('extractSpreadsheetPages — XLSX', () => {
   })
 
   it('returns multiple pages for multi-sheet workbooks', async () => {
-    const XLSX = await import('xlsx')
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['A']]), 'Sheet1')
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['B']]), 'Sheet2')
-    const buf = Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as ArrayBuffer)
+    const buf = await buildMinimalXlsx([
+      { name: 'Sheet1', rows: [['A']] },
+      { name: 'Sheet2', rows: [['B']] },
+    ])
 
     const pages = await extractSpreadsheetPages(buf, logger)
     expect(pages).toHaveLength(2)
