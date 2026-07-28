@@ -5,6 +5,7 @@
 import { writeFile, mkdir, rename } from 'fs/promises'
 import { join } from 'path'
 import { fileURLToPath } from 'url'
+import { existsSync } from 'fs'
 
 const FIXTURES = join(fileURLToPath(import.meta.url), '..', 'fixtures')
 
@@ -47,6 +48,8 @@ export async function setup() {
   await mkdir(FIXTURES, { recursive: true })
 
   const target = join(FIXTURES, 'simple.pdf')
+
+  // Write atomically via temp-file + rename to avoid concurrent-read issues
   const tmp = target + '.tmp'
   await writeFile(tmp, buildMinimalPdf('OpenParse test document with some sample text'))
   await rename(tmp, target)
