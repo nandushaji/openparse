@@ -1,3 +1,23 @@
+// ─── Errors ───────────────────────────────────────────────────────────────────
+
+/**
+ * Thrown when cumulative estimated LLM token usage reaches `maxTokenBudget`.
+ * Inspect `result` to access pages that completed before the limit was hit.
+ */
+export class CostLimitError extends Error {
+  readonly partialResult: Omit<ParseResult, 'items'>
+
+  constructor(tokensUsed: number, budget: number, partialResult: Omit<ParseResult, 'items'>) {
+    super(
+      `Token budget exceeded: used ~${tokensUsed.toLocaleString()} tokens against a ` +
+        `limit of ${budget.toLocaleString()}. ` +
+        `Access partial results via error.partialResult.`
+    )
+    this.name = 'CostLimitError'
+    this.partialResult = partialResult
+  }
+}
+
 // ─── Public API types ─────────────────────────────────────────────────────────
 
 export type ParseMode = 'fast' | 'cost_effective' | 'agentic' | 'auto'
@@ -29,6 +49,14 @@ export interface ParseOptions {
   maxRetries?: number
   /** Render DPI for PDF page images in agentic mode (default: 150) */
   dpi?: number
+  /** Hard cap on pages processed — pages beyond this are silently dropped (default: unlimited) */
+  maxPages?: number
+  /**
+   * Soft cap on estimated LLM input tokens across all pages.
+   * When the running total reaches this limit processing stops and a
+   * `CostLimitError` is thrown. Pages already completed are preserved. (default: unlimited)
+   */
+  maxTokenBudget?: number
   /** Enable debug logging to stderr */
   debug?: boolean
   /** Called after each page completes */
@@ -106,6 +134,12 @@ export interface ExtractedPage {
   positions?: TextPosition[]
   pageWidth?: number
   pageHeight?: number
+  /**
+   * Pre-converted markdown produced by a format extractor (e.g. DOCX, PPTX, HTML).
+   * When present, fast mode uses this directly instead of running its own
+   * text-to-markdown heuristics. Never transmitted to an LLM.
+   */
+  preRenderedMarkdown?: string
 }
 
 export interface TextPosition {
