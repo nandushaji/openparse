@@ -6,14 +6,21 @@ export interface FastResult {
 }
 
 /**
- * Fast mode: no LLM call. Converts the PDF text layer to basic markdown using
- * simple heuristics. Good for plain single-column prose.
+ * Fast mode: no LLM call.
+ * - For DOCX pages, uses the pre-rendered markdown from the mammoth extractor.
+ * - For PDF pages, converts the text layer to basic markdown via simple heuristics.
  */
 export async function processFast(page: ExtractedPage): Promise<FastResult> {
   const raw = page.text.trim()
 
   if (!raw) {
     return { markdown: '', text: '' }
+  }
+
+  // DOCX pages carry pre-converted markdown from the HTML extractor
+  const preRendered = (page as ExtractedPage & { _preRenderedMarkdown?: string })._preRenderedMarkdown
+  if (preRendered) {
+    return { markdown: preRendered, text: raw }
   }
 
   const markdown = textToBasicMarkdown(raw)

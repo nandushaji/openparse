@@ -87,6 +87,6 @@ describe('mergeResults', () => {
     expect(result.metadata.filename).toBe('report.pdf')
     expect(result.metadata.model).toBe('gpt-4o')
     expect(result.metadata.durationMs).toBe(1234)
-    expect(result.metadata.version).toBe('0.1.0')
+    expect(result.metadata.version).toMatch(/^\d+\.\d+\.\d+$/)
   })
 })

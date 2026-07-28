@@ -6,7 +6,7 @@ import type {
   ResultType,
 } from './types.js'
 
-const LIB_VERSION = '0.1.0'
+const LIB_VERSION = __LIB_VERSION__
 
 export function mergeResults(
   pages: PageResult[],

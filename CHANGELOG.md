@@ -9,7 +9,30 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
-## [0.1.0] — 2024-01-01
+## [0.2.0] — 2026-07-28
+
+### Added
+
+- **DOCX support** — `.docx` files (and DOCX Buffers) are now parsed via `mammoth`.
+  Headings, bold/italic, lists, links, and tables are converted to GitHub-Flavored Markdown.
+- **Buffer image detection** — passing an image `Buffer` (PNG, JPEG, WebP, GIF) is now
+  correctly routed to image/agentic mode instead of always being treated as PDF.
+- **Real integration tests** — 8 new tests run the full `parse()` pipeline against an actual
+  PDF fixture with no LLM required, covering Buffer round-trips, progress callbacks, page ranges,
+  and result shape validation.
+
+### Changed
+
+- `metadata.version` in `ParseResult` is now injected at build time from `package.json`
+  via `tsup` `define`, so it stays accurate automatically across releases.
+- Vitest config (`vitest.config.ts`) added so `__LIB_VERSION__` is available during test runs.
+- Error message for unsupported file types updated to reflect DOCX is now supported.
+
+### Fixed
+
+- `Buffer` inputs that are images no longer silently fail inside the PDF parser.
+
+## [0.1.0] — 2026-07-28
 
 ### Added
 

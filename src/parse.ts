@@ -13,6 +13,7 @@ import { createPool } from './utils/concurrency.js'
 import { parsePageRange } from './utils/pages.js'
 import { getPdfPageCount, extractPdfPages, makeImagePage } from './extract/text.js'
 import { renderPdfPages } from './extract/render.js'
+import { extractDocxPages } from './extract/docx.js'
 import { classifyPage } from './router.js'
 import { processFast } from './modes/fast.js'
 import { processCostEffective } from './modes/costEffective.js'
@@ -49,8 +50,8 @@ export async function parse(
   const logger = createLogger(options.debug ?? false)
 
   // 1. Resolve input to buffer + filename
-  const { buffer, filename, isImage, mimeType } = await resolveInput(input)
-  logger.log(`Loaded "${filename}" (${buffer.length} bytes, isImage=${isImage})`)
+  const { buffer, filename, isImage, isDocx, mimeType } = await resolveInput(input)
+  logger.log(`Loaded "${filename}" (${buffer.length} bytes, isImage=${isImage}, isDocx=${isDocx})`)
 
   // 2. Build config
   const provider = options.provider ?? 'openai'
@@ -88,9 +89,9 @@ export async function parse(
 
   // 3. Enumerate pages
   let pageNumbers: number[]
-  const pdfBuffer: Buffer | null = isImage ? null : buffer
+  const pdfBuffer: Buffer | null = isImage || isDocx ? null : buffer
 
-  if (isImage) {
+  if (isImage || isDocx) {
     pageNumbers = [1]
   } else {
     const pageCount = await getPdfPageCount(buffer)
@@ -106,14 +107,16 @@ export async function parse(
   // 4. Extract text layer for all requested pages
   let extractedPages: ExtractedPage[]
 
-  if (isImage) {
+  if (isDocx) {
+    extractedPages = await extractDocxPages(buffer, logger)
+  } else if (isImage) {
     extractedPages = [makeImagePage(buffer, mimeType)]
   } else {
     extractedPages = await extractPdfPages(buffer, pageNumbers, logger)
   }
 
-  // 5. Pre-render pages that will need screenshots (only in agentic/auto modes)
-  const needsRendering = mode === 'agentic' || mode === 'auto'
+  // 5. Pre-render pages that will need screenshots (only agentic/auto on PDFs)
+  const needsRendering = !isDocx && (mode === 'agentic' || mode === 'auto')
   let renderedImages: Map<number, Buffer> = new Map()
 
   if (needsRendering && pdfBuffer) {
@@ -272,16 +275,48 @@ const IMAGE_MIMES: Record<string, string> = {
   '.gif': 'image/gif',
 }
 
+type BufferKind = 'pdf' | 'docx' | 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
+
+/** Sniff magic bytes to identify buffer content without relying on a file extension. */
+function sniffBuffer(buf: Buffer): BufferKind {
+  if (buf.length < 4) return 'pdf'
+  // PNG: 89 50 4E 47
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'image/png'
+  // JPEG: FF D8 FF
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg'
+  // GIF: 47 49 46 38
+  if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38) return 'image/gif'
+  // WebP: RIFF....WEBP
+  if (
+    buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
+    buf.length >= 12 &&
+    buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50
+  ) return 'image/webp'
+  // DOCX/ZIP: PK 03 04
+  if (buf[0] === 0x50 && buf[1] === 0x4b && buf[2] === 0x03 && buf[3] === 0x04) return 'docx'
+  return 'pdf'
+}
+
 interface ResolvedInput {
   buffer: Buffer
   filename: string
   isImage: boolean
+  isDocx: boolean
   mimeType: string
 }
 
 async function resolveInput(input: string | Buffer | URL): Promise<ResolvedInput> {
   if (Buffer.isBuffer(input)) {
-    return { buffer: input, filename: 'document', isImage: false, mimeType: 'application/pdf' }
+    const kind = sniffBuffer(input)
+    const isImage = kind.startsWith('image/')
+    const isDocx = kind === 'docx'
+    return {
+      buffer: input,
+      filename: isDocx ? 'document.docx' : isImage ? `document.${kind.split('/')[1]}` : 'document.pdf',
+      isImage,
+      isDocx,
+      mimeType: isImage ? kind : isDocx ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/pdf',
+    }
   }
 
   const inputStr = typeof input === 'string' ? input : input.href
@@ -296,11 +331,15 @@ async function resolveInput(input: string | Buffer | URL): Promise<ResolvedInput
     const rawName = path.basename(inputStr.split('?')[0]) || 'document'
     const ext = path.extname(rawName).toLowerCase()
     const isImage = IMAGE_EXTS.has(ext)
+    const isDocx = ext === '.docx'
     return {
       buffer: buf,
       filename: rawName,
       isImage,
-      mimeType: IMAGE_MIMES[ext] ?? 'application/pdf',
+      isDocx,
+      mimeType: isDocx
+        ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        : IMAGE_MIMES[ext] ?? 'application/pdf',
     }
   }
 
@@ -310,12 +349,13 @@ async function resolveInput(input: string | Buffer | URL): Promise<ResolvedInput
   const filename = path.basename(filePath)
   const ext = path.extname(filename).toLowerCase()
   const isImage = IMAGE_EXTS.has(ext)
+  const isDocx = ext === '.docx'
 
-  if (!isImage && ext !== '.pdf') {
+  if (!isImage && !isDocx && ext !== '.pdf') {
     throw new Error(
       `Unsupported file type: "${ext}". ` +
-        'Supported formats: PDF (.pdf), PNG (.png), JPEG (.jpg/.jpeg), WebP (.webp).\n' +
-        'DOCX/PPTX support is planned for a future release.'
+        'Supported formats: PDF (.pdf), DOCX (.docx), PNG (.png), JPEG (.jpg/.jpeg), WebP (.webp).\n' +
+        'PPTX support is planned for a future release.'
     )
   }
 
@@ -323,6 +363,9 @@ async function resolveInput(input: string | Buffer | URL): Promise<ResolvedInput
     buffer,
     filename,
     isImage,
-    mimeType: IMAGE_MIMES[ext] ?? 'application/pdf',
+    isDocx,
+    mimeType: isDocx
+      ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      : IMAGE_MIMES[ext] ?? 'application/pdf',
   }
 }

@@ -1,4 +1,12 @@
 import { defineConfig } from 'tsup'
+import { createRequire } from 'module'
+
+const require = createRequire(import.meta.url)
+const pkg = require('./package.json') as { version: string }
+
+const sharedDefine = {
+  __LIB_VERSION__: JSON.stringify(pkg.version),
+}
 
 export default defineConfig([
   {
@@ -10,6 +18,7 @@ export default defineConfig([
     sourcemap: true,
     target: 'node20',
     external: ['pdfjs-dist', 'canvas'],
+    define: sharedDefine,
     esbuildOptions(options) {
       options.conditions = ['module']
     },
@@ -23,6 +32,7 @@ export default defineConfig([
     sourcemap: false,
     target: 'node20',
     external: ['pdfjs-dist', 'canvas'],
+    define: sharedDefine,
     banner: { js: '#!/usr/bin/env node' },
     esbuildOptions(options) {
       options.conditions = ['module']

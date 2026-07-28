@@ -1,6 +1,6 @@
 {
   "name": "@openparse/core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Open-source, LlamaParse-like document parsing for Node.js. Bring your own LLM key.",
   "license": "MIT",
   "type": "module",
@@ -20,8 +20,8 @@
     }
   },
   "bin": {
-    "openparse": "./dist/cli.cjs",
-    "op": "./dist/cli.cjs"
+    "openparse": "dist/cli.cjs",
+    "op": "dist/cli.cjs"
   },
   "scripts": {
     "build": "tsup",
@@ -34,6 +34,7 @@
   },
   "dependencies": {
     "commander": "^12.1.0",
+    "mammoth": "^1.12.0",
     "pdfjs-dist": "^4.9.155"
   },
   "optionalDependencies": {
@@ -78,7 +79,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/nandushaji/openparse.git"
+    "url": "git+https://github.com/nandushaji/openparse.git"
   },
   "homepage": "https://github.com/nandushaji/openparse#readme",
   "bugs": {
