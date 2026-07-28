@@ -15,6 +15,9 @@ import { parsePageRange } from './utils/pages.js'
 import { getPdfPageCount, extractPdfPages, makeImagePage } from './extract/text.js'
 import { renderPdfPages } from './extract/render.js'
 import { extractDocxPages } from './extract/docx.js'
+import { extractPptxPages } from './extract/pptx.js'
+import { extractSpreadsheetPages } from './extract/xlsx.js'
+import { extractPlaintextPage } from './extract/plaintext.js'
 import { classifyPage } from './router.js'
 import { processFast } from './modes/fast.js'
 import { processCostEffective } from './modes/costEffective.js'
@@ -51,8 +54,8 @@ export async function parse(
   const logger = createLogger(options.debug ?? false)
 
   // 1. Resolve input to buffer + filename
-  const { buffer, filename, isImage, isDocx, mimeType } = await resolveInput(input)
-  logger.log(`Loaded "${filename}" (${buffer.length} bytes, isImage=${isImage}, isDocx=${isDocx})`)
+  const { buffer, filename, ext, kind, mimeType } = await resolveInput(input)
+  logger.log(`Loaded "${filename}" (${buffer.length} bytes, kind=${kind})`)
 
   // 2. Build config
   const provider = options.provider ?? 'openai'
@@ -92,16 +95,22 @@ export async function parse(
 
   // 3. Enumerate pages
   let pageNumbers: number[]
-  const pdfBuffer: Buffer | null = isImage || isDocx ? null : buffer
+  const isPdf = kind === 'pdf'
 
-  if (isImage || isDocx) {
-    pageNumbers = [1]
-  } else {
+  if (isPdf) {
     const pageCount = await getPdfPageCount(buffer)
     logger.log(`PDF has ${pageCount} pages`)
     pageNumbers = options.pages
       ? parsePageRange(options.pages, pageCount)
       : Array.from({ length: pageCount }, (_, i) => i + 1)
+  } else {
+    pageNumbers = [1]
+  }
+
+  // Apply maxPages hard cap
+  if (pageNumbers.length > maxPages) {
+    logger.log(`maxPages=${maxPages} cap: trimming ${pageNumbers.length} → ${maxPages} pages`)
+    pageNumbers = pageNumbers.slice(0, maxPages)
   }
 
   // Apply maxPages hard cap
@@ -113,22 +122,42 @@ export async function parse(
   const totalPages = pageNumbers.length
   logger.log(`Processing ${totalPages} page(s) with mode="${mode}"`)
 
-  // 4. Extract text layer for all requested pages
+  // 4. Extract text for all requested pages (dispatcher by format kind)
   let extractedPages: ExtractedPage[]
 
-  if (isDocx) {
-    extractedPages = await extractDocxPages(buffer, logger)
-  } else if (isImage) {
-    extractedPages = [makeImagePage(buffer, mimeType)]
-  } else {
-    extractedPages = await extractPdfPages(buffer, pageNumbers, logger)
+  switch (kind) {
+    case 'pdf':
+      extractedPages = await extractPdfPages(buffer, pageNumbers, logger)
+      break
+    case 'docx':
+      extractedPages = await extractDocxPages(buffer, logger)
+      break
+    case 'pptx':
+      extractedPages = await extractPptxPages(buffer, logger)
+      break
+    case 'spreadsheet':
+      extractedPages = await extractSpreadsheetPages(buffer, logger)
+      break
+    case 'csv':
+      extractedPages = await extractSpreadsheetPages(buffer, logger, {
+        delimiter: ext === '.tsv' ? '\t' : ',',
+      })
+      break
+    case 'plaintext':
+      extractedPages = await extractPlaintextPage(buffer, ext, logger)
+      break
+    case 'image':
+      extractedPages = [makeImagePage(buffer, mimeType)]
+      break
+    default:
+      extractedPages = await extractPdfPages(buffer, pageNumbers, logger)
   }
 
-  // 5. Pre-render pages that will need screenshots (only agentic/auto on PDFs)
-  const needsRendering = !isDocx && (mode === 'agentic' || mode === 'auto')
+  // 5. Pre-render pages that need screenshots (PDF only, agentic/auto modes)
+  const needsRendering = isPdf && (mode === 'agentic' || mode === 'auto')
   let renderedImages: Map<number, Buffer> = new Map()
 
-  if (needsRendering && pdfBuffer) {
+  if (needsRendering) {
     // In auto mode, render only pages the router flags as agentic
     const agenticCandidates =
       mode === 'auto'
@@ -143,7 +172,7 @@ export async function parse(
     if (agenticCandidates.length > 0) {
       logger.log(`Rendering ${agenticCandidates.length} page(s) for vision processing…`)
       try {
-        const rendered = await renderPdfPages(pdfBuffer, agenticCandidates, dpi, logger)
+        const rendered = await renderPdfPages(buffer, agenticCandidates, dpi, logger)
         for (const [pageNum, renderedPage] of rendered) {
           renderedImages.set(pageNum, renderedPage.imageBuffer)
         }
@@ -299,16 +328,25 @@ export async function parse(
 
 // ─── Input resolution ──────────────────────────────────────────────────────────
 
-const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif'])
+const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.tiff', '.tif', '.heic', '.heif'])
 const IMAGE_MIMES: Record<string, string> = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.webp': 'image/webp',
   '.gif': 'image/gif',
+  '.bmp': 'image/bmp',
+  '.tiff': 'image/tiff',
+  '.tif': 'image/tiff',
+  '.heic': 'image/heic',
+  '.heif': 'image/heif',
 }
 
-type BufferKind = 'pdf' | 'docx' | 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
+const SPREADSHEET_EXTS = new Set(['.xlsx', '.xls', '.xlsm', '.ods', '.numbers'])
+const CSV_EXTS = new Set(['.csv', '.tsv'])
+const PLAINTEXT_EXTS = new Set(['.txt', '.md', '.markdown', '.rtf', '.html', '.htm'])
+
+type BufferKind = 'pdf' | 'docx' | 'pptx' | 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
 
 /** Sniff magic bytes to identify buffer content without relying on a file extension. */
 function sniffBuffer(buf: Buffer): BufferKind {
@@ -325,30 +363,55 @@ function sniffBuffer(buf: Buffer): BufferKind {
     buf.length >= 12 &&
     buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50
   ) return 'image/webp'
-  // DOCX/ZIP: PK 03 04
+  // ZIP-based formats: PK 03 04 (DOCX, PPTX, XLSX, ODS — distinguished by extension at call site)
   if (buf[0] === 0x50 && buf[1] === 0x4b && buf[2] === 0x03 && buf[3] === 0x04) return 'docx'
   return 'pdf'
 }
 
+type FormatKind = 'pdf' | 'image' | 'docx' | 'pptx' | 'spreadsheet' | 'csv' | 'plaintext'
+
 interface ResolvedInput {
   buffer: Buffer
   filename: string
-  isImage: boolean
-  isDocx: boolean
+  ext: string
+  kind: FormatKind
   mimeType: string
 }
 
+function classifyExt(ext: string): FormatKind {
+  if (ext === '.pdf') return 'pdf'
+  if (IMAGE_EXTS.has(ext)) return 'image'
+  if (ext === '.docx' || ext === '.doc') return 'docx'
+  if (ext === '.pptx' || ext === '.ppt') return 'pptx'
+  if (SPREADSHEET_EXTS.has(ext)) return 'spreadsheet'
+  if (CSV_EXTS.has(ext)) return 'csv'
+  if (PLAINTEXT_EXTS.has(ext)) return 'plaintext'
+  return 'pdf'
+}
+
+const SUPPORTED_EXTS = new Set([
+  '.pdf',
+  '.docx', '.doc',
+  '.pptx', '.ppt',
+  ...SPREADSHEET_EXTS,
+  ...CSV_EXTS,
+  ...IMAGE_EXTS,
+  ...PLAINTEXT_EXTS,
+])
+
 async function resolveInput(input: string | Buffer | URL): Promise<ResolvedInput> {
   if (Buffer.isBuffer(input)) {
-    const kind = sniffBuffer(input)
-    const isImage = kind.startsWith('image/')
-    const isDocx = kind === 'docx'
+    const sniff = sniffBuffer(input)
+    const isImage = sniff.startsWith('image/')
+    const isZip = sniff === 'docx'
+    const kind: FormatKind = isImage ? 'image' : isZip ? 'docx' : 'pdf'
+    const ext = isImage ? `.${sniff.split('/')[1]}` : isZip ? '.docx' : '.pdf'
     return {
       buffer: input,
-      filename: isDocx ? 'document.docx' : isImage ? `document.${kind.split('/')[1]}` : 'document.pdf',
-      isImage,
-      isDocx,
-      mimeType: isImage ? kind : isDocx ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/pdf',
+      filename: `document${ext}`,
+      ext,
+      kind,
+      mimeType: isImage ? sniff : 'application/pdf',
     }
   }
 
@@ -363,16 +426,13 @@ async function resolveInput(input: string | Buffer | URL): Promise<ResolvedInput
     const buf = Buffer.from(await res.arrayBuffer())
     const rawName = path.basename(inputStr.split('?')[0]) || 'document'
     const ext = path.extname(rawName).toLowerCase()
-    const isImage = IMAGE_EXTS.has(ext)
-    const isDocx = ext === '.docx'
+    const kind = classifyExt(ext)
     return {
       buffer: buf,
       filename: rawName,
-      isImage,
-      isDocx,
-      mimeType: isDocx
-        ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        : IMAGE_MIMES[ext] ?? 'application/pdf',
+      ext,
+      kind,
+      mimeType: IMAGE_MIMES[ext] ?? 'application/octet-stream',
     }
   }
 
@@ -381,24 +441,21 @@ async function resolveInput(input: string | Buffer | URL): Promise<ResolvedInput
   const buffer = await fs.readFile(filePath)
   const filename = path.basename(filePath)
   const ext = path.extname(filename).toLowerCase()
-  const isImage = IMAGE_EXTS.has(ext)
-  const isDocx = ext === '.docx'
 
-  if (!isImage && !isDocx && ext !== '.pdf') {
+  if (!SUPPORTED_EXTS.has(ext)) {
     throw new Error(
       `Unsupported file type: "${ext}". ` +
-        'Supported formats: PDF (.pdf), DOCX (.docx), PNG (.png), JPEG (.jpg/.jpeg), WebP (.webp).\n' +
-        'PPTX support is planned for a future release.'
+        'Supported formats: PDF, DOCX, PPTX, XLSX/XLS/CSV/TSV, ' +
+        'PNG/JPEG/WebP/GIF/BMP/TIFF/HEIC, HTML, TXT, MD, RTF.\n' +
+        'EPUB support is planned for a future release.'
     )
   }
 
   return {
     buffer,
     filename,
-    isImage,
-    isDocx,
-    mimeType: isDocx
-      ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-      : IMAGE_MIMES[ext] ?? 'application/pdf',
+    ext,
+    kind: classifyExt(ext),
+    mimeType: IMAGE_MIMES[ext] ?? 'application/octet-stream',
   }
 }
