@@ -1,5 +1,12 @@
 import type { LLMClient, LLMRequest, LLMResponse } from '../types.js'
 
+/** Strip trailing slashes without a regex (avoids polynomial ReDoS). */
+function trimTrailingSlashes(s: string): string {
+  let end = s.length
+  while (end > 0 && s[end - 1] === '/') end--
+  return end === s.length ? s : s.slice(0, end)
+}
+
 interface OpenAIChoice {
   message: { content: string | null }
 }
@@ -20,7 +27,7 @@ export class OpenAIClient implements LLMClient {
 
   constructor(apiKey: string, baseUrl: string) {
     this.apiKey = apiKey
-    this.baseUrl = baseUrl.replace(/\/+$/, '')
+    this.baseUrl = trimTrailingSlashes(baseUrl)
   }
 
   async chat(request: LLMRequest): Promise<LLMResponse> {
