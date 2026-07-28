@@ -23,7 +23,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci --omit=optional
+        run: npm ci
 
       - name: Type check
         run: npm run typecheck
@@ -43,7 +43,7 @@ jobs:
         with:
           node-version: '20'
           cache: npm
-      - run: npm ci --omit=optional
+      - run: npm ci
       - run: npm run build
       - name: Check dist exists
         run: |
