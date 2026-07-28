@@ -1,4 +1,5 @@
 export { parse } from './parse.js'
+export { parseStream } from './stream.js'
 
 export { CostLimitError } from './types.js'
 
