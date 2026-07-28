@@ -174,7 +174,7 @@ export async function* parseStream(
 
     return retry(
       async () => {
-        let partialResult: Omit<PageResult, 'pageNumber' | 'modeUsed'> = {
+        let partialResult: Omit<PageResult, 'pageNumber' | 'mode' | 'modeUsed'> = {
           markdown: '',
           text: '',
           hasScreenshot: false,
@@ -218,6 +218,7 @@ export async function* parseStream(
           pageNumber: pageNum,
           markdown: partialResult.markdown,
           text: partialResult.text,
+          mode: actualMode,
           modeUsed: actualMode,
           hasScreenshot: partialResult.hasScreenshot ?? false,
           tokensUsed: (partialResult as { tokensUsed?: number }).tokensUsed,

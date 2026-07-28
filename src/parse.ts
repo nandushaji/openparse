@@ -7,7 +7,7 @@ import type {
   ExtractedPage,
   ParseMode,
 } from './types.js'
-import { CostLimitError } from './types.js'
+import { CostLimitError, InvalidDocumentError, UnsupportedFormatError } from './types.js'
 import { createLogger } from './utils/logger.js'
 import { retry } from './utils/retry.js'
 import { createPool } from './utils/concurrency.js'
@@ -98,11 +98,29 @@ export async function parse(
   const isPdf = kind === 'pdf'
 
   if (isPdf) {
-    const pageCount = await getPdfPageCount(buffer)
+    let pageCount: number
+    try {
+      pageCount = await getPdfPageCount(buffer)
+    } catch (err) {
+      throw new InvalidDocumentError(
+        `Failed to open PDF: ${(err as Error).message}`,
+        err as Error
+      )
+    }
     logger.log(`PDF has ${pageCount} pages`)
-    pageNumbers = options.pages
-      ? parsePageRange(options.pages, pageCount)
-      : Array.from({ length: pageCount }, (_, i) => i + 1)
+
+    if (options.pages) {
+      pageNumbers = parsePageRange(options.pages, pageCount)
+      if (pageNumbers.length === 0) {
+        throw new InvalidDocumentError(
+          `Page range "${options.pages}" does not overlap the document's ${pageCount} page(s). ` +
+            `Valid range: 1–${pageCount}.`,
+          new RangeError(`Page range "${options.pages}" is out of bounds for a ${pageCount}-page document`)
+        )
+      }
+    } else {
+      pageNumbers = Array.from({ length: pageCount }, (_, i) => i + 1)
+    }
   } else {
     pageNumbers = [1]
   }
@@ -207,7 +225,7 @@ export async function parse(
         ` multiCol=${complexity.isMultiColumn}`
     )
 
-    let pageResult: Omit<PageResult, 'pageNumber' | 'modeUsed'> = {
+    let pageResult: Omit<PageResult, 'pageNumber' | 'mode' | 'modeUsed'> = {
       markdown: '',
       text: '',
       hasScreenshot: false,
@@ -261,6 +279,7 @@ export async function parse(
         pageNumber: pageNum,
         markdown: pageResult.markdown,
         text: pageResult.text,
+        mode: actualMode,
         modeUsed: actualMode,
         hasScreenshot: pageResult.hasScreenshot ?? false,
         tokensUsed: tokensUsed || undefined,
@@ -279,6 +298,7 @@ export async function parse(
         pageNumber: pageNum,
         markdown: '',
         text: '',
+        mode: actualMode,
         modeUsed: actualMode,
         hasScreenshot: false,
         error: errMsg,
@@ -443,12 +463,7 @@ async function resolveInput(input: string | Buffer | URL): Promise<ResolvedInput
   const ext = path.extname(filename).toLowerCase()
 
   if (!SUPPORTED_EXTS.has(ext)) {
-    throw new Error(
-      `Unsupported file type: "${ext}". ` +
-        'Supported formats: PDF, DOCX, PPTX, XLSX/XLS/CSV/TSV, ' +
-        'PNG/JPEG/WebP/GIF/BMP/TIFF/HEIC, HTML, TXT, MD, RTF.\n' +
-        'EPUB support is planned for a future release.'
-    )
+    throw new UnsupportedFormatError(ext)
   }
 
   return {

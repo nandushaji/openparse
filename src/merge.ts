@@ -32,7 +32,7 @@ export function mergeResults(
   let estimatedTokens = 0
 
   for (const p of sorted) {
-    pagesByMode[p.modeUsed] = (pagesByMode[p.modeUsed] ?? 0) + 1
+    pagesByMode[p.mode] = (pagesByMode[p.mode] ?? 0) + 1
     estimatedTokens += p.tokensUsed ?? 0
   }
 
@@ -43,8 +43,12 @@ export function mergeResults(
     durationMs,
   }
 
+  // Heading / table detection in items requires LLM-generated markdown structure.
+  // When every page ran in fast mode, the LLM was never called and the markdown
+  // won't contain '# headings' or '| tables', so items would always be empty.
+  const llmUsed = sorted.some(p => p.mode !== 'fast')
   const items: ParseResultItems | undefined =
-    resultType === 'json' ? extractItems(sorted) : undefined
+    resultType === 'json' && llmUsed ? extractItems(sorted) : undefined
 
   return {
     markdown,
@@ -56,7 +60,9 @@ export function mergeResults(
       filename,
       pageCount: sorted.length,
       durationMs,
-      model,
+      // Expose null when no LLM was invoked so callers can't mistake the default
+      // model name for something that was actually used.
+      model: llmUsed ? model : null,
       version: LIB_VERSION,
     },
     errors,

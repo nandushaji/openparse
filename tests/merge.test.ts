@@ -3,10 +3,12 @@ import { mergeResults } from '../src/merge.js'
 import type { PageResult } from '../src/types.js'
 
 function makePage(overrides: Partial<PageResult> & { pageNumber: number }): PageResult {
+  const modeUsed = overrides.modeUsed ?? overrides.mode ?? 'fast'
   return {
     markdown: '',
     text: '',
-    modeUsed: 'fast',
+    mode: modeUsed,
+    modeUsed,
     hasScreenshot: false,
     ...overrides,
   }
@@ -30,9 +32,9 @@ describe('mergeResults', () => {
 
   it('populates usage stats correctly', () => {
     const pages = [
-      makePage({ pageNumber: 1, modeUsed: 'fast' }),
-      makePage({ pageNumber: 2, modeUsed: 'cost_effective', tokensUsed: 100 }),
-      makePage({ pageNumber: 3, modeUsed: 'agentic', tokensUsed: 300 }),
+      makePage({ pageNumber: 1, mode: 'fast', modeUsed: 'fast' }),
+      makePage({ pageNumber: 2, mode: 'cost_effective', modeUsed: 'cost_effective', tokensUsed: 100 }),
+      makePage({ pageNumber: 3, mode: 'agentic', modeUsed: 'agentic', tokensUsed: 300 }),
     ]
 
     const result = mergeResults(pages, [], 'test.pdf', 'gpt-4o-mini', 'markdown', 500)
@@ -54,10 +56,13 @@ describe('mergeResults', () => {
     expect(result.errors[0].pageNumber).toBe(2)
   })
 
-  it('extracts structured items when resultType is json', () => {
+  it('extracts structured items when resultType is json and LLM was used', () => {
+    // items require at least one LLM-processed (non-fast) page
     const pages = [
       makePage({
         pageNumber: 1,
+        mode: 'cost_effective',
+        modeUsed: 'cost_effective',
         markdown:
           '# Main Heading\n\n## Sub Heading\n\nA paragraph here.\n\n| Col A | Col B |\n|-------|-------|\n| 1 | 2 |',
         text: 'some text',
@@ -74,19 +79,32 @@ describe('mergeResults', () => {
     expect(result.items!.tables[0].markdown).toContain('Col A')
   })
 
+  it('does not extract items in fast-only runs even with resultType json', () => {
+    // All fast — no LLM markdown structure, so items would always be empty anyway
+    const pages = [makePage({ pageNumber: 1, markdown: 'plain text here', text: 'plain text here' })]
+    const result = mergeResults(pages, [], 'test.pdf', 'gpt-4o-mini', 'json', 100)
+    expect(result.items).toBeUndefined()
+  })
+
   it('does not extract items when resultType is markdown', () => {
-    const pages = [makePage({ pageNumber: 1, markdown: '# Heading', text: 'Heading' })]
+    const pages = [makePage({ pageNumber: 1, mode: 'cost_effective', modeUsed: 'cost_effective', markdown: '# Heading', text: 'Heading' })]
     const result = mergeResults(pages, [], 'test.pdf', 'gpt-4o-mini', 'markdown', 100)
     expect(result.items).toBeUndefined()
   })
 
-  it('sets correct metadata', () => {
-    const pages = [makePage({ pageNumber: 1 })]
+  it('sets model to string when LLM was used', () => {
+    const pages = [makePage({ pageNumber: 1, mode: 'cost_effective', modeUsed: 'cost_effective' })]
     const result = mergeResults(pages, [], 'report.pdf', 'gpt-4o', 'markdown', 1234)
 
     expect(result.metadata.filename).toBe('report.pdf')
     expect(result.metadata.model).toBe('gpt-4o')
     expect(result.metadata.durationMs).toBe(1234)
     expect(result.metadata.version).toMatch(/^\d+\.\d+\.\d+$/)
+  })
+
+  it('sets model to null in fast-only runs', () => {
+    const pages = [makePage({ pageNumber: 1 })]
+    const result = mergeResults(pages, [], 'report.pdf', 'gpt-4o', 'markdown', 1234)
+    expect(result.metadata.model).toBeNull()
   })
 })

@@ -9,6 +9,23 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.3.2] — 2026-07-28
+
+### Fixed
+- **pdfjs warning suppressed** — "Please use the legacy build in Node.js environments" no longer
+  surfaces on every run; the advisory is intercepted during initialization.
+- **`page.mode` now populated** — `PageResult` now exposes `mode` (primary field) alongside the
+  existing `modeUsed` alias so `result.pages[0].mode` returns `'fast'` / `'cost_effective'` / `'agentic'`.
+- **`items` omitted in fast-only runs** — when every page is processed in fast mode (no LLM call),
+  `ParseResult.items` is `undefined` instead of `{ headings: [], tables: [] }`. Heading and table
+  detection requires LLM-generated markdown structure.
+- **`metadata.model` is `null` in fast mode** — avoids the misleading `"model": "gpt-4o-mini"`
+  appearing in metadata when no LLM was invoked.
+- **Out-of-range `pages` option throws `InvalidDocumentError`** — `pages: '100-200'` on a 14-page
+  PDF now throws with a clear message instead of silently returning `{ pages: [] }`.
+- **Typed errors exported** — `OpenParseError`, `InvalidDocumentError`, `UnsupportedFormatError`
+  are now exported from the package so callers can `instanceof`-check specific error kinds.
+
 ## [0.3.1] — 2026-07-28
 
 ### Security

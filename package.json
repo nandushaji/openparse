@@ -1,6 +1,6 @@
 {
   "name": "@openparse/core",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Open-source, LlamaParse-like document parsing for Node.js. Bring your own LLM key.",
   "license": "MIT",
   "type": "module",

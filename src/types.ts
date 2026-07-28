@@ -1,10 +1,53 @@
 // ─── Errors ───────────────────────────────────────────────────────────────────
 
+/** Base class for all errors thrown by @openparse/core. */
+export class OpenParseError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'OpenParseError'
+  }
+}
+
+/**
+ * Thrown when the input file is corrupt, password-protected, or not a valid
+ * document (e.g. a `.pdf` extension on a plain-text file).
+ *
+ * Wraps the underlying pdfjs / mammoth / jszip error so callers can
+ * `catch (err) { if (err instanceof InvalidDocumentError) ... }`.
+ */
+export class InvalidDocumentError extends OpenParseError {
+  readonly cause: Error
+
+  constructor(message: string, cause: Error) {
+    super(message)
+    this.name = 'InvalidDocumentError'
+    this.cause = cause
+  }
+}
+
+/**
+ * Thrown when a file extension or MIME type is not supported by the parser.
+ */
+export class UnsupportedFormatError extends OpenParseError {
+  readonly ext: string
+
+  constructor(ext: string) {
+    super(
+      `Unsupported file type: "${ext}". ` +
+        'Supported formats: PDF, DOCX, PPTX, XLSX/XLS/CSV/TSV, ' +
+        'PNG/JPEG/WebP/GIF/BMP/TIFF/HEIC, HTML, TXT, MD, RTF.\n' +
+        'EPUB support is planned for a future release.'
+    )
+    this.name = 'UnsupportedFormatError'
+    this.ext = ext
+  }
+}
+
 /**
  * Thrown when cumulative estimated LLM token usage reaches `maxTokenBudget`.
- * Inspect `result` to access pages that completed before the limit was hit.
+ * Inspect `partialResult` to access pages that completed before the limit was hit.
  */
-export class CostLimitError extends Error {
+export class CostLimitError extends OpenParseError {
   readonly partialResult: Omit<ParseResult, 'items'>
 
   constructor(tokensUsed: number, budget: number, partialResult: Omit<ParseResult, 'items'>) {
@@ -82,6 +125,12 @@ export interface PageResult {
   pageNumber: number
   markdown: string
   text: string
+  /** The parsing mode used for this page. */
+  mode: Exclude<ParseMode, 'auto'>
+  /**
+   * @deprecated Use `mode` instead. Kept for backward compatibility.
+   * @see mode
+   */
   modeUsed: Exclude<ParseMode, 'auto'>
   hasScreenshot: boolean
   tokensUsed?: number
@@ -108,14 +157,22 @@ export interface ParseResult {
   text: string
   /** Per-page results in page order */
   pages: PageResult[]
-  /** Structured extraction — populated only when resultType is 'json' */
+  /**
+   * Structured extraction — populated only when `resultType` is `'json'` AND
+   * at least one page was processed with an LLM (cost_effective or agentic mode).
+   * `undefined` in fast-only runs because heading/table detection requires LLM interpretation.
+   */
   items?: ParseResultItems
   usage: UsageInfo
   metadata: {
     filename: string
     pageCount: number
     durationMs: number
-    model: string
+    /**
+     * The LLM model used, or `null` when parsing ran entirely in fast mode
+     * (no LLM was invoked).
+     */
+    model: string | null
     /** Library version */
     version: string
   }
