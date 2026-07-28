@@ -21,7 +21,10 @@ export class AnthropicClient implements LLMClient {
 
   constructor(apiKey: string, baseUrl = 'https://api.anthropic.com') {
     this.apiKey = apiKey
-    this.baseUrl = baseUrl.replace(/\/+$/, '')
+    let url = baseUrl
+    let i = url.length
+    while (i > 0 && url[i - 1] === '/') i--
+    this.baseUrl = i === url.length ? url : url.slice(0, i)
   }
 
   async chat(request: LLMRequest): Promise<LLMResponse> {

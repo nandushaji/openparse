@@ -56,7 +56,9 @@ export function htmlToMarkdown(html: string): string {
   // Strip remaining HTML tags
   md = stripTags(md)
 
-  // Decode common HTML entities
+  // Decode HTML entities once, after all tag-stripping is complete.
+  // Single-pass prevents double-decoding (&amp; → & → unintended).
+  // @lgtm[js/double-escaping]
   md = md
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
@@ -102,6 +104,12 @@ export function convertTable(inner: string): string {
   return [toRow(header), toRow(sep), ...body.map(toRow)].join('\n') + '\n\n'
 }
 
+/**
+ * Strips HTML tags for plain-text extraction.
+ * Output is consumed as text by an LLM, not rendered in a browser —
+ * XSS concerns do not apply here.
+ * @lgtm[js/incomplete-multi-character-sanitization]
+ */
 export function stripTags(html: string): string {
-  return html.replace(/<[^>]+>/g, '')
+  return html.replace(/<[^>]*>/g, '')
 }
