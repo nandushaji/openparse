@@ -42,8 +42,7 @@ export async function extractDocxPages(
     hasPositionData: false,
   }
 
-  // Attach markdown as a side-channel for the fast mode renderer
-  ;(page as ExtractedPage & { _preRenderedMarkdown?: string })._preRenderedMarkdown = markdown
+  page.preRenderedMarkdown = markdown
 
   return [page]
 }

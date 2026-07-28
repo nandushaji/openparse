@@ -1,5 +1,7 @@
 export { parse } from './parse.js'
 
+export { CostLimitError } from './types.js'
+
 export type {
   ParseOptions,
   ParseResult,

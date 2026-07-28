@@ -7,6 +7,7 @@ import type {
   ExtractedPage,
   ParseMode,
 } from './types.js'
+import { CostLimitError } from './types.js'
 import { createLogger } from './utils/logger.js'
 import { retry } from './utils/retry.js'
 import { createPool } from './utils/concurrency.js'
@@ -71,6 +72,8 @@ export async function parse(
   const dpi = options.dpi ?? DEFAULTS.dpi
   const temperature = options.temperature ?? DEFAULTS.temperature
   const maxRetries = options.maxRetries ?? DEFAULTS.maxRetries
+  const maxPages = options.maxPages ?? Infinity
+  const maxTokenBudget = options.maxTokenBudget ?? Infinity
 
   // Choose a sensible default model based on mode
   const defaultModel =
@@ -99,6 +102,12 @@ export async function parse(
     pageNumbers = options.pages
       ? parsePageRange(options.pages, pageCount)
       : Array.from({ length: pageCount }, (_, i) => i + 1)
+  }
+
+  // Apply maxPages hard cap
+  if (pageNumbers.length > maxPages) {
+    logger.log(`maxPages=${maxPages} cap: trimming ${pageNumbers.length} → ${maxPages} pages`)
+    pageNumbers = pageNumbers.slice(0, maxPages)
   }
 
   const totalPages = pageNumbers.length
@@ -152,6 +161,8 @@ export async function parse(
   const results: PageResult[] = []
   const errors: Array<{ pageNumber: number; error: string }> = []
   let pagesComplete = 0
+  let tokensTotalUsed = 0
+  let budgetExceeded = false
 
   const processPage = async (extracted: ExtractedPage): Promise<void> => {
     const pageNum = extracted.pageNumber
@@ -214,14 +225,22 @@ export async function parse(
         { attempts: maxRetries, delayMs: 500 }
       )
 
+      const tokensUsed = (pageResult as { tokensUsed?: number }).tokensUsed ?? 0
+      tokensTotalUsed += tokensUsed
+
       results.push({
         pageNumber: pageNum,
         markdown: pageResult.markdown,
         text: pageResult.text,
         modeUsed: actualMode,
         hasScreenshot: pageResult.hasScreenshot ?? false,
-        tokensUsed: (pageResult as { tokensUsed?: number }).tokensUsed,
+        tokensUsed: tokensUsed || undefined,
       })
+
+      // Check token budget after each page
+      if (tokensTotalUsed > maxTokenBudget) {
+        budgetExceeded = true
+      }
     } catch (err) {
       const errMsg = (err as Error).message
       logger.error(`Page ${pageNum} failed after ${maxRetries} attempts: ${errMsg}`)
@@ -253,15 +272,29 @@ export async function parse(
     })
   }
 
-  await Promise.all(extractedPages.map(p => pool(() => processPage(p))))
+  await Promise.all(
+    extractedPages.map(p =>
+      pool(async () => {
+        if (budgetExceeded) return
+        await processPage(p)
+      })
+    )
+  )
 
   // 7. Merge and return
   const durationMs = Date.now() - startMs
   logger.log(
-    `Done in ${durationMs}ms — pages: ${results.length}, errors: ${errors.length}`
+    `Done in ${durationMs}ms — pages: ${results.length}, errors: ${errors.length}` +
+      (budgetExceeded ? ` [token budget exceeded: ~${tokensTotalUsed} tokens]` : '')
   )
 
-  return mergeResults(results, errors, filename, model, resultType, durationMs)
+  const merged = mergeResults(results, errors, filename, model, resultType, durationMs)
+
+  if (budgetExceeded) {
+    throw new CostLimitError(tokensTotalUsed, maxTokenBudget, merged)
+  }
+
+  return merged
 }
 
 // ─── Input resolution ──────────────────────────────────────────────────────────

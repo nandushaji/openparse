@@ -17,10 +17,8 @@ export async function processFast(page: ExtractedPage): Promise<FastResult> {
     return { markdown: '', text: '' }
   }
 
-  // DOCX pages carry pre-converted markdown from the HTML extractor
-  const preRendered = (page as ExtractedPage & { _preRenderedMarkdown?: string })._preRenderedMarkdown
-  if (preRendered) {
-    return { markdown: preRendered, text: raw }
+  if (page.preRenderedMarkdown) {
+    return { markdown: page.preRenderedMarkdown, text: raw }
   }
 
   const markdown = textToBasicMarkdown(raw)
