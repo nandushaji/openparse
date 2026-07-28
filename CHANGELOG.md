@@ -9,6 +9,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-07-28
+
+### Security
+- Moved `canvas` from `optionalDependencies` to an optional `peerDependency` — users who
+  don't need agentic (vision-LLM) mode now install zero native packages and see zero
+  deprecation warnings. To enable agentic mode: `npm install canvas`.
+
 ## [0.3.0] — 2026-07-28
 
 ### Added
