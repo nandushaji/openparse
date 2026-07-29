@@ -267,7 +267,28 @@ console.log(result.items?.tables)
 
 ## Custom LLM client
 
-Implement the `LLMClient` interface to use any backend:
+Pass a pre-built client into `parse()` — useful for custom auth, retries, or non-standard backends:
+
+```ts
+import { parse, OpenAIClient, AnthropicClient } from '@openparse/core'
+
+const client = new OpenAIClient({
+  apiKey: process.env.OPENAI_API_KEY!,
+  baseUrl: 'https://api.groq.com/openai/v1', // optional
+})
+
+await parse('./doc.pdf', {
+  client,
+  model: 'llama-3.3-70b-versatile',
+  mode: 'cost_effective',
+})
+
+// Or Anthropic:
+const anthropic = new AnthropicClient({ apiKey: process.env.ANTHROPIC_API_KEY! })
+await parse('./doc.pdf', { client: anthropic, model: 'claude-3-5-haiku-20241022' })
+```
+
+You can also implement the `LLMClient` interface for any backend:
 
 ```ts
 import type { LLMClient, LLMRequest, LLMResponse } from '@openparse/core'
@@ -278,6 +299,8 @@ class MyClient implements LLMClient {
     return { content: '...', tokensUsed: 42 }
   }
 }
+
+await parse('./doc.pdf', { client: new MyClient(), model: 'my-model' })
 ```
 
 ---

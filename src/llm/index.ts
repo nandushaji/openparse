@@ -14,10 +14,10 @@ export interface CreateLLMClientOptions {
 export function createLLMClient(options: CreateLLMClientOptions): LLMClient {
   switch (options.provider) {
     case 'anthropic':
-      return new AnthropicClient(options.apiKey, options.baseUrl)
+      return new AnthropicClient({ apiKey: options.apiKey, baseUrl: options.baseUrl })
     case 'openai':
     case 'compatible':
     default:
-      return new OpenAIClient(options.apiKey, options.baseUrl)
+      return new OpenAIClient({ apiKey: options.apiKey, baseUrl: options.baseUrl })
   }
 }

@@ -1,6 +1,5 @@
-import { createRequire } from 'module'
-import { pathToFileURL } from 'url'
 import type { Logger } from '../utils/logger.js'
+import { getPdfjs } from './pdfjs.js'
 
 const RENDER_ERROR_MSG =
   'PDF page rendering requires the "canvas" package.\n' +
@@ -37,17 +36,7 @@ export async function renderPdfPages(
     throw new Error(RENDER_ERROR_MSG)
   }
 
-  const pdfjs = await import('pdfjs-dist')
-
-  // Configure worker (mirrors text.ts setup)
-  try {
-    const req = createRequire(import.meta.url)
-    const workerPath = req.resolve('pdfjs-dist/build/pdf.worker.mjs')
-    pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href
-  } catch {
-    pdfjs.GlobalWorkerOptions.workerSrc = ''
-  }
-
+  const pdfjs = await getPdfjs()
   const scale = dpi / 72 // PDF user units are 1/72 inch
 
   // Build a NodeCanvasFactory for pdfjs

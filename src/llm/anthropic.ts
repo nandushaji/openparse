@@ -1,5 +1,20 @@
 import type { LLMClient, LLMRequest, LLMResponse, LLMMessage } from '../types.js'
 
+const DEFAULT_BASE_URL = 'https://api.anthropic.com'
+
+/** Strip trailing slashes without a regex (avoids polynomial ReDoS). */
+function trimTrailingSlashes(s: string): string {
+  let end = s.length
+  while (end > 0 && s[end - 1] === '/') end--
+  return end === s.length ? s : s.slice(0, end)
+}
+
+export interface AnthropicClientOptions {
+  apiKey: string
+  /** Default: `https://api.anthropic.com` */
+  baseUrl?: string
+}
+
 interface AnthropicContent {
   type: string
   text?: string
@@ -11,20 +26,53 @@ interface AnthropicResponse {
   error?: { message: string; type: string }
 }
 
+function resolveAnthropicArgs(
+  apiKeyOrOptions: string | AnthropicClientOptions,
+  baseUrl?: string
+): { apiKey: string; baseUrl: string } {
+  if (typeof apiKeyOrOptions === 'object' && apiKeyOrOptions !== null) {
+    const { apiKey, baseUrl: url } = apiKeyOrOptions
+    if (typeof apiKey !== 'string' || !apiKey) {
+      throw new TypeError(
+        'AnthropicClient: options.apiKey must be a non-empty string. ' +
+          'Usage: new AnthropicClient({ apiKey, baseUrl? })'
+      )
+    }
+    return { apiKey, baseUrl: trimTrailingSlashes(url ?? DEFAULT_BASE_URL) }
+  }
+
+  if (typeof apiKeyOrOptions === 'string') {
+    return {
+      apiKey: apiKeyOrOptions,
+      baseUrl: trimTrailingSlashes(baseUrl ?? DEFAULT_BASE_URL),
+    }
+  }
+
+  throw new TypeError(
+    'AnthropicClient: expected new AnthropicClient({ apiKey, baseUrl? }) ' +
+      'or new AnthropicClient(apiKey, baseUrl?). ' +
+      `Received: ${typeof apiKeyOrOptions}`
+  )
+}
+
 /**
  * Anthropic Messages API adapter. Translates from OpenAI-style LLMRequest
  * to Anthropic's format: separate system parameter, image via source.base64.
+ *
+ * @example
+ * new AnthropicClient({ apiKey: process.env.ANTHROPIC_API_KEY! })
+ * new AnthropicClient(apiKey, baseUrl) // positional form still supported
  */
 export class AnthropicClient implements LLMClient {
   private readonly apiKey: string
   private readonly baseUrl: string
 
-  constructor(apiKey: string, baseUrl = 'https://api.anthropic.com') {
-    this.apiKey = apiKey
-    let url = baseUrl
-    let i = url.length
-    while (i > 0 && url[i - 1] === '/') i--
-    this.baseUrl = i === url.length ? url : url.slice(0, i)
+  constructor(options: AnthropicClientOptions)
+  constructor(apiKey: string, baseUrl?: string)
+  constructor(apiKeyOrOptions: string | AnthropicClientOptions, baseUrl?: string) {
+    const resolved = resolveAnthropicArgs(apiKeyOrOptions, baseUrl)
+    this.apiKey = resolved.apiKey
+    this.baseUrl = resolved.baseUrl
   }
 
   async chat(request: LLMRequest): Promise<LLMResponse> {

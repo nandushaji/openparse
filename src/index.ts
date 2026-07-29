@@ -25,6 +25,8 @@ export type {
 } from './types.js'
 
 export { OpenAIClient } from './llm/openai.js'
+export type { OpenAIClientOptions } from './llm/openai.js'
 export { AnthropicClient } from './llm/anthropic.js'
+export type { AnthropicClientOptions } from './llm/anthropic.js'
 export { createLLMClient } from './llm/index.js'
 export { classifyPage } from './router.js'

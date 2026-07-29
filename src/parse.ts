@@ -6,6 +6,7 @@ import type {
   PageResult,
   ExtractedPage,
   ParseMode,
+  LLMClient,
 } from './types.js'
 import { CostLimitError, InvalidDocumentError, UnsupportedFormatError } from './types.js'
 import { createLogger } from './utils/logger.js'
@@ -84,14 +85,19 @@ export async function parse(
   const model =
     options.model ?? process.env['OPENPARSE_MODEL'] ?? defaultModel
 
-  if (!apiKey && mode !== 'fast') {
+  if (!options.client && !apiKey && mode !== 'fast') {
     throw new Error(
-      'No API key provided. Set the apiKey option or OPENAI_API_KEY / ANTHROPIC_API_KEY environment variable.\n' +
+      'No API key provided. Set the apiKey option, pass a client, or set OPENAI_API_KEY / ANTHROPIC_API_KEY.\n' +
       'Use mode: "fast" to parse without an LLM key (text-layer extraction only).'
     )
   }
 
-  const llmClient = createLLMClient({ apiKey, baseUrl, provider })
+  const llmClient: LLMClient =
+    options.client ??
+    (mode === 'fast'
+      ? // Fast mode never calls the LLM — stub avoids requiring an API key.
+        { chat: async () => { throw new Error('Internal: LLM client invoked in fast mode') } }
+      : createLLMClient({ apiKey, baseUrl, provider }))
 
   // 3. Enumerate pages
   let pageNumbers: number[]
@@ -123,12 +129,6 @@ export async function parse(
     }
   } else {
     pageNumbers = [1]
-  }
-
-  // Apply maxPages hard cap
-  if (pageNumbers.length > maxPages) {
-    logger.log(`maxPages=${maxPages} cap: trimming ${pageNumbers.length} → ${maxPages} pages`)
-    pageNumbers = pageNumbers.slice(0, maxPages)
   }
 
   // Apply maxPages hard cap

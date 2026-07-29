@@ -9,11 +9,27 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.3.3] — 2026-07-30
+
+### Added
+- **`client` option on `parse()` / `parseStream()`** — inject a pre-built `LLMClient`
+  (`OpenAIClient`, `AnthropicClient`, `createLLMClient()`, or a custom implementation).
+  When set, `apiKey` / `baseUrl` / `provider` are not used for client construction.
+- **Options-object constructors** — `new OpenAIClient({ apiKey, baseUrl? })` and
+  `new AnthropicClient({ apiKey, baseUrl? })`. Positional `(apiKey, baseUrl?)` still works.
+
+### Fixed
+- **pdfjs legacy warning** — actually uses `pdfjs-dist/legacy/build/pdf.mjs` in Node instead of
+  suppressing a `console.warn` that never fired (pdfjs logs via `console.log`). The
+  "Please use the `legacy` build in Node.js environments" message is gone.
+- Clear `TypeError` when `OpenAIClient` / `AnthropicClient` are constructed with an invalid
+  argument shape (previously crashed inside URL trimming with an opaque error).
+
 ## [0.3.2] — 2026-07-28
 
 ### Fixed
-- **pdfjs warning suppressed** — "Please use the legacy build in Node.js environments" no longer
-  surfaces on every run; the advisory is intercepted during initialization.
+- **pdfjs warning suppressed** — attempted to intercept the legacy-build advisory during
+  initialization (incomplete — see 0.3.3 for the real fix).
 - **`page.mode` now populated** — `PageResult` now exposes `mode` (primary field) alongside the
   existing `modeUsed` alias so `result.pages[0].mode` returns `'fast'` / `'cost_effective'` / `'agentic'`.
 - **`items` omitted in fast-only runs** — when every page is processed in fast mode (no LLM call),

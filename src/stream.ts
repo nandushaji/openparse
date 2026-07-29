@@ -21,6 +21,7 @@ import type {
   PageResult,
   ExtractedPage,
   ParseMode,
+  LLMClient,
 } from './types.js'
 import { createLogger } from './utils/logger.js'
 import { retry } from './utils/retry.js'
@@ -94,14 +95,18 @@ export async function* parseStream(
     mode === 'agentic' ? DEFAULTS.modelAgentic : DEFAULTS.modelCostEffective
   const model = options.model ?? process.env['OPENPARSE_MODEL'] ?? defaultModel
 
-  if (!apiKey && mode !== 'fast') {
+  if (!options.client && !apiKey && mode !== 'fast') {
     throw new Error(
-      'No API key provided. Set the apiKey option or OPENAI_API_KEY / ANTHROPIC_API_KEY.\n' +
+      'No API key provided. Set the apiKey option, pass a client, or set OPENAI_API_KEY / ANTHROPIC_API_KEY.\n' +
         'Use mode: "fast" to parse without an LLM key.'
     )
   }
 
-  const llmClient = createLLMClient({ apiKey, baseUrl, provider })
+  const llmClient: LLMClient =
+    options.client ??
+    (mode === 'fast'
+      ? { chat: async () => { throw new Error('Internal: LLM client invoked in fast mode') } }
+      : createLLMClient({ apiKey, baseUrl, provider }))
 
   // ── 3. Enumerate pages ─────────────────────────────────────────────────────
   let pageNumbers: number[]

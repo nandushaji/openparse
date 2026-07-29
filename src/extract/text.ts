@@ -1,44 +1,6 @@
-import { createRequire } from 'module'
-import { pathToFileURL } from 'url'
 import type { ExtractedPage, TextPosition } from '../types.js'
 import type { Logger } from '../utils/logger.js'
-
-// ─── pdfjs worker setup ────────────────────────────────────────────────────────
-// Runs once per process. Uses createRequire so it works in both ESM and CJS builds.
-let pdfjsLib: typeof import('pdfjs-dist') | null = null
-
-async function getPdfjs(): Promise<typeof import('pdfjs-dist')> {
-  if (pdfjsLib) return pdfjsLib
-
-  // pdfjs-dist v4 emits "Please use the legacy build in Node.js environments."
-  // via console.warn on every load in Node.js. Our server-side usage is well-tested
-  // and intentional — suppress only this specific advisory message.
-  const origWarn = console.warn.bind(console)
-  console.warn = (...args: unknown[]) => {
-    if (typeof args[0] === 'string' && args[0].includes('legacy build')) return
-    origWarn(...args)
-  }
-
-  let lib: typeof import('pdfjs-dist')
-  try {
-    lib = await import('pdfjs-dist')
-  } finally {
-    console.warn = origWarn
-  }
-
-  pdfjsLib = lib
-
-  try {
-    const req = createRequire(import.meta.url)
-    const workerPath = req.resolve('pdfjs-dist/build/pdf.worker.mjs')
-    lib.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href
-  } catch {
-    // Fallback: empty string triggers pdfjs FakeWorker (main-thread, synchronous)
-    lib.GlobalWorkerOptions.workerSrc = ''
-  }
-
-  return lib
-}
+import { getPdfjs } from './pdfjs.js'
 
 // ─── Public functions ──────────────────────────────────────────────────────────
 

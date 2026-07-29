@@ -76,6 +76,15 @@ export interface ParseOptions {
   baseUrl?: string
   /** Provider format. Use 'anthropic' for Anthropic API; 'compatible' for custom OpenAI-compat endpoints. */
   provider?: LLMProvider
+  /**
+   * Pre-built LLM client. When set, `apiKey` / `baseUrl` / `provider` are ignored
+   * for client construction (you still pass `model` separately).
+   *
+   * @example
+   * const client = new OpenAIClient({ apiKey, baseUrl: 'http://localhost:11434/v1' })
+   * await parse(file, { client, model: 'llava', mode: 'cost_effective' })
+   */
+  client?: LLMClient
   /** Parsing mode (default: 'auto') */
   mode?: ParseMode
   /** Output format (default: 'markdown') */
