@@ -11,7 +11,7 @@ program
     'Open-source LlamaParse-like document parsing. Bring your own LLM key.\n' +
     'Package: @openparse/core  |  Docs: https://github.com/nandushaji/openparse'
   )
-  .version('0.1.0')
+  .version(typeof __LIB_VERSION__ !== 'undefined' ? __LIB_VERSION__ : '0.0.0')
 
 program
   .argument('<file>', 'Path to a PDF or image file, or an HTTP(S) URL')

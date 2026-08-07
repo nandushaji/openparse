@@ -9,6 +9,20 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.3.4] — 2026-08-08
+
+### Fixed
+- **`canvas` peerDependency declared** — restored the explicit `peerDependencies.canvas`
+  entry so optional peer metadata is valid and installers resolve the peer correctly.
+- **CLI `--version`** — reports the real package version via `__LIB_VERSION__` instead of a
+  hard-coded `0.1.0`.
+- **Agentic fallback docs** — clarified that missing page images return the raw text layer
+  (no LLM call), not a `cost_effective` pass.
+
+### Changed
+- **README** — rewritten against current behavior: format coverage, `parseStream` limits,
+  modes / `canvas` requirements, API reference, and roadmap.
+
 ## [0.3.3] — 2026-07-30
 
 ### Added

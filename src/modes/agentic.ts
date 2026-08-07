@@ -28,7 +28,7 @@ Rules:
 
 /**
  * Agentic mode: sends the page image + text layer to a vision LLM.
- * Falls back to text-only (cost_effective) if image rendering is unavailable.
+ * If no image is available, returns the raw text layer (no LLM call).
  */
 export async function processAgentic(
   page: ExtractedPage,
